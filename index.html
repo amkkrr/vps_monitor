@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Monitor Demo</title>
+    <link rel="stylesheet" href="monitor-styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            gap: 20px;
+        }
+
+        .monitor-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            margin: 0 0 20px 0;
+            color: #1f2937;
+        }
+
+        .control-panel {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: #3B82F6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background: #2563EB;
+        }
+
+        button:disabled {
+            background: #9CA3AF;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-left: auto;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .status.active {
+            background: #D1FAE5;
+            color: #065F46;
+        }
+
+        .status.inactive {
+            background: #FEE2E2;
+            color: #991B1B;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="monitor-section">
+            <h1>Network Traffic Monitor</h1>
+            <div class="control-panel">
+                <button id="startBtn">Start All</button>
+                <button id="stopBtn" disabled>Stop All</button>
+                <div id="status" class="status inactive">Inactive</div>
+            </div>
+            <div id="networkMonitor"></div>
+        </div>
+
+        <div class="monitor-section">
+            <h1>CPU Monitor</h1>
+            <div id="cpuMonitor"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import NetworkMonitor from './network-monitor.js';
+        import CPUMonitor from './cpu-monitor.js';
+        
+        // Initialize monitors
+        const networkMonitor = new NetworkMonitor('networkMonitor');
+        const cpuMonitor = new CPUMonitor('cpuMonitor');
+
+        // Global control buttons
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+
+        let isMonitoring = false;
+
+        function updateStatus(isActive) {
+            isMonitoring = isActive;
+            startBtn.disabled = isActive;
+            stopBtn.disabled = !isActive;
+            status.textContent = isActive ? 'Active' : 'Inactive';
+            status.className = `status ${isActive ? 'active' : 'inactive'}`;
+        }
+
+        startBtn.addEventListener('click', () => {
+            networkMonitor.startMonitoring();
+            cpuMonitor.subscribeToAPI();
+            updateStatus(true);
+        });
+
+        stopBtn.addEventListener('click', () => {
+            networkMonitor.stopMonitoring();
+            cpuMonitor.unsubscribeFromAPI();
+            updateStatus(false);
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            networkMonitor.destroy();
+            cpuMonitor.destroy();
+        });
+    </script>
+</body>
+</html>

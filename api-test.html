@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Manager Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .control-panel {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-left: 20px;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .status.active {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.inactive {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+        }
+        #updateInterval {
+            padding: 6px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>API Manager Test</h1>
+        <div class="control-panel">
+            <button id="startBtn">Start</button>
+            <button id="stopBtn" disabled>Stop</button>
+            <label for="updateInterval">Update Interval (ms):</label>
+            <input type="number" id="updateInterval" value="1000" min="500" step="500">
+            <button id="setIntervalBtn">Set Interval</button>
+            <div id="status" class="status inactive">Inactive</div>
+        </div>
+        <h2>Latest Data:</h2>
+        <pre id="output">No data</pre>
+    </div>
+
+    <script type="module">
+        import APIManager from './api-manager.js';
+
+        const componentId = 'api-test-page';
+        let isSubscribed = false;
+
+        // 更新UI状态
+        function updateUIState(isRunning) {
+            document.getElementById('startBtn').disabled = isRunning;
+            document.getElementById('stopBtn').disabled = !isRunning;
+            const status = document.getElementById('status');
+            status.textContent = isRunning ? 'Active' : 'Inactive';
+            status.className = `status ${isRunning ? 'active' : 'inactive'}`;
+        }
+
+        // 数据回调函数
+        function handleData(data) {
+            const output = document.getElementById('output');
+            if (data.error) {
+                output.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                output.textContent = JSON.stringify(data, null, 2);
+            }
+        }
+
+        // 开始监听按钮
+        document.getElementById('startBtn').addEventListener('click', () => {
+            if (!isSubscribed) {
+                APIManager.subscribe(componentId, handleData);
+                isSubscribed = true;
+                updateUIState(true);
+            }
+        });
+
+        // 停止监听按钮
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            if (isSubscribed) {
+                APIManager.unsubscribe(componentId);
+                isSubscribed = false;
+                updateUIState(false);
+                document.getElementById('output').textContent = 'No data';
+            }
+        });
+
+        // 设置更新间隔按钮
+        document.getElementById('setIntervalBtn').addEventListener('click', () => {
+            const interval = parseInt(document.getElementById('updateInterval').value);
+            if (interval >= 500) {
+                APIManager.setUpdateInterval(interval);
+            } else {
+                alert('Interval must be at least 500ms');
+            }
+        });
+    </script>
+</body>
+</html>
