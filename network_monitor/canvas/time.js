@@ -2,19 +2,21 @@
 
 /**
  * 时间轴管理器类
+ * 处理时间轴的显示、缩放和格式化
  */
 export class TimeAxisManager {
     constructor() {
         // 默认配置
         this.config = {
-            minTimeRange: 30,     // 最小时间范围（秒）
-            maxTimeRange: 3600,   // 最大时间范围（秒）
-            defaultRange: 100,    // 默认显示范围（秒）
-            stepCount: 6,         // 时间刻度数量
+            minTimeRange: 10,      // 最小时间范围（秒）
+            maxTimeRange: 3600,    // 最大时间范围（秒）
+            defaultRange: 100,     // 默认显示范围（秒）
+            stepCount: 6,          // 时间刻度数量
             fontSize: 12,
             fontFamily: 'Arial',
             textColor: '#4B5563',
-            labelFormat: 'auto'   // 可选: 'auto', 'seconds', 'time'
+            labelFormat: 'auto',   // 可选: 'auto', 'seconds', 'time'
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone // 获取本地时区
         };
 
         this.currentRange = this.config.defaultRange;
@@ -35,15 +37,18 @@ export class TimeAxisManager {
 
     /**
      * 计算时间刻度
-     * @param {number} timeRange - 时间范围（秒）
      * @returns {Array} 时间刻度数组
      */
     calculateTimeSteps() {
         const steps = [];
-        const stepSize = this.currentRange / this.config.stepCount;
-
-        for (let i = 0; i <= this.config.stepCount; i++) {
-            steps.push(-this.currentRange + (i * stepSize));
+        // 根据当前范围动态调整步长
+        const stepSize = this.currentRange / (this.config.stepCount - 1);
+        
+        // 确保步长是整数秒
+        const roundedStepSize = Math.round(stepSize);
+        
+        for (let i = 0; i < this.config.stepCount; i++) {
+            steps.push(-this.currentRange + (i * roundedStepSize));
         }
 
         return steps;
@@ -56,47 +61,69 @@ export class TimeAxisManager {
      */
     formatTimeLabel(seconds) {
         if (seconds === 0) {
-            return '现在';
+            return '当前';
         }
+
+        const absSeconds = Math.abs(seconds);
 
         switch (this.config.labelFormat) {
             case 'seconds':
                 return `${seconds}秒`;
-            case 'time':
+                
+            case 'time': {
                 const date = new Date(Date.now() + seconds * 1000);
-                return date.toLocaleTimeString('zh-CN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
+                return this.formatTimeWithTimeZone(date);
+            }
+                
             case 'auto':
             default:
-                if (Math.abs(seconds) < 60) {
+                if (absSeconds < 60) {
                     return `${seconds}秒`;
-                } else if (Math.abs(seconds) < 3600) {
-                    const minutes = Math.floor(Math.abs(seconds) / 60);
-                    const remainingSeconds = Math.abs(seconds) % 60;
+                } else if (absSeconds < 3600) {
+                    const minutes = Math.floor(absSeconds / 60);
+                    const remainingSeconds = absSeconds % 60;
                     return remainingSeconds === 0 ? 
-                        `${minutes}分钟` : 
-                        `${minutes}分${remainingSeconds}秒`;
+                        `${minutes}分钟前` : 
+                        `${minutes}分${remainingSeconds}秒前`;
                 } else {
-                    const hours = Math.floor(Math.abs(seconds) / 3600);
-                    const minutes = Math.floor((Math.abs(seconds) % 3600) / 60);
+                    const hours = Math.floor(absSeconds / 3600);
+                    const minutes = Math.floor((absSeconds % 3600) / 60);
                     return minutes === 0 ? 
-                        `${hours}小时` : 
-                        `${hours}小时${minutes}分`;
+                        `${hours}小时前` : 
+                        `${hours}小时${minutes}分前`;
                 }
         }
     }
 
     /**
+     * 使用本地时区格式化时间
+     * @param {Date} date - 日期对象
+     * @returns {string} 格式化的时间字符串
+     */
+    formatTimeWithTimeZone(date) {
+        return new Intl.DateTimeFormat('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: this.config.timeZone
+        }).format(date);
+    }
+
+    /**
      * 处理缩放事件
      * @param {WheelEvent} event - 滚轮事件对象
+     * @returns {boolean} 是否进行了缩放
      */
     handleZoom(event) {
-        const zoomFactor = event.deltaY > 0 ? 1.1 : 0.9;
+        const zoomSensitivity = 0.1;
+        const zoomFactor = event.deltaY > 0 ? 
+            (1 + zoomSensitivity) : 
+            (1 - zoomSensitivity);
+
         const newRange = this.currentRange * zoomFactor;
 
+        // 确保在有效范围内
         if (newRange >= this.config.minTimeRange && 
             newRange <= this.config.maxTimeRange) {
             this.currentRange = newRange;
@@ -116,15 +143,35 @@ export class TimeAxisManager {
         ctx.save();
         ctx.font = `${this.config.fontSize}px ${this.config.fontFamily}`;
         ctx.fillStyle = this.config.textColor;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-
-        // 计算标签位置和绘制标签
-        timeSteps.forEach(seconds => {
+        
+        // 测量标签宽度以检测重叠
+        const labels = timeSteps.map(t => this.formatTimeLabel(t));
+        const labelWidths = labels.map(label => ctx.measureText(label).width);
+        const timeStepPixels = (plotArea.right - plotArea.left) / (timeSteps.length - 1);
+        
+        // 检测是否需要旋转标签
+        const needRotation = labelWidths.some(width => width > timeStepPixels);
+        
+        // 绘制标签
+        timeSteps.forEach((seconds, index) => {
             const x = this.mapTimeToX(seconds, plotArea);
-            const label = this.formatTimeLabel(seconds);
+            const label = labels[index];
             
-            ctx.fillText(label, x, plotArea.bottom + 5);
+            if (needRotation) {
+                // 旋转绘制标签
+                ctx.save();
+                ctx.translate(x, plotArea.bottom + 5);
+                ctx.rotate(-Math.PI / 4);
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, 0, 0);
+                ctx.restore();
+            } else {
+                // 正常绘制标签
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText(label, x, plotArea.bottom + 5);
+            }
         });
 
         ctx.restore();
